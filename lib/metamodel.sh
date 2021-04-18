@@ -51,35 +51,37 @@ function __Metamodel__() {
 	esac
 }
 
-# accepts name of attribute to collect
+# join arrays on a single char
+function __petriflow__join_by { local IFS="$1"; shift; echo "$*"; }
+
+# accepts name of attribute to collect into a csv/vector
 function __petriflow__vector() {
 	local prefix=$1
 	local attrib=$2
-	local out=""
+	declare -a local vout
 
 	for label in "${!__petriflow__places[@]}"; do
 		# REVIEW: does order == offset here ?
 		if [[ $label =~ $prefix ]]; then
+			local i=${__petriflow__places_attribs[${label}_offset]}
 			if [[ "${attrib}x" == "0x" ]]; then
-				out=${out}${attrib},
+				vout[$i]=0
 			else
-				out=${out}${__petriflow__places_attribs[${label}_${attrib}]},
+				vout[$i]=${__petriflow__places_attribs[${label}_${attrib}]}
 			fi
 		fi
 	done
 
-	echo -n ${out%?}
+	echo $(__petriflow__join_by ',' ${vout[@]})
 
-	if [[ "${out}x" == "x" ]]; then
-		return 1 # mo matching model
-	else
-		return 0
-	fi
 }
 
 # add two vectors
 # returns -1 if any part of the result is negative
 function __petriflow__vadd() {
+	local arr1
+	local arr2
+
 	IFS=, read -a arr1 <<<$1
 	IFS=, read -a arr2 <<<$2
 

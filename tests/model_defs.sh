@@ -20,7 +20,7 @@ function counter_v1() {
 	role default
 
 	cell p0 0 10
-	cell p1 1 10
+	cell p1 1 11
 
 	fn incP0 default 1,0
 	fn decP0 default -1,0
@@ -35,9 +35,9 @@ ${m}.init
 state=$(${m}.initial_vector)
 
 assert_OK "failed to build initial vector"
-assert_EQ $state 1,0 # FIXME: order is not guaranteed in maps
+assert_EQ $state 0,1
 assert_EQ $(${m}.empty_vector) 0,0
-assert_EQ $(${m}.capacity_vector) 10,10
+assert_EQ $(${m}.capacity_vector) 10,11
 
 function tx() {
 	local action=$1
