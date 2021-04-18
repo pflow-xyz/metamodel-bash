@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#set -u
+#set -u # KLUDGE some issues with using strict mode
 
 # changed to a random id for each model 'instance'
 __petriflow__model_dsl_prefix="0000_"
@@ -19,7 +19,7 @@ function Metamodel() {
 }
 
 function __Metamodel__() {
-	local id="$1" # randomid
+	local id="$1" # object-id
 	local model=$2
 	local attrib="$3"
 	local state="${4:-}"
@@ -28,9 +28,12 @@ function __Metamodel__() {
 	case "$attrib" in
 	'.init')
 		__petriflow__model_dsl_prefix="${id}_" # set instance prefix
-		__petriflow__models[model]=$id         # record that model was loaded
+		__petriflow__models[$id]=$model         # record which model was loaded by object-id
 		$model                                 # build the model
 		__petriflow__model_dsl_prefix="0000_"  # set back to default
+		;;
+	'.type')
+		echo ${__petriflow__models[$id]}
 		;;
 	'.empty_vector')
 		__petriflow__vector "${id}_" 0
@@ -42,7 +45,7 @@ function __Metamodel__() {
 		__petriflow__vector "${id}_" capacity
 		;;
 	'.transform')
-		echo "__petriflow__transform ${id}_ $state $action"
+		__petriflow__transform ${id}_ $state $action
 		;;
 	*)
 		echo "UNDEFINED: ${attrib}"

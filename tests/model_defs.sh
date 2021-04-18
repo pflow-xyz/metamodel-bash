@@ -32,16 +32,18 @@ function counter_v1() {
 m=$(Metamodel counter_v1)
 ${m}.init
 
-state=$(${m}.initial_vector)
-
-assert_OK "failed to build initial vector"
-assert_EQ $state 0,1
+assert_EQ $(${m}.type) "counter_v1"
 assert_EQ $(${m}.empty_vector) 0,0
 assert_EQ $(${m}.capacity_vector) 10,11
 
+state=$(${m}.initial_vector)
+assert_OK "failed to build initial vector"
+assert_EQ $state 0,1
+
+
 function tx() {
 	local action=$1
-	local vout=$($(${m}.transform $state $action))
+	local vout=$(${m}.transform $state $action)
 	if [[ $? -eq 0 ]]; then
 		state=$vout
 	fi
