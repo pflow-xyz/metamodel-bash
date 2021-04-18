@@ -5,14 +5,15 @@ building out petri-net dsl in bash
 
 BACKLOG
 -------
-- [ ] fix bug where place order is not deterministic
+- [ ] allow multiple-x action invocation
 - [ ] test/check capacity
-- [ ] support arc/inhibitors
+- [ ] add DSL support for arc/inhibitors
 
 ICEBOX
 ------
-- [ ] test tic-tac-toe
+- [ ] define and test tic-tac-toe
 
 DONE
 ----
+- [x] fix bug where place order is not deterministic
 - [x] should allow multi-model usage in same script (scoping)
