@@ -105,12 +105,13 @@ function __petriflow__reindex() {
 			if [[ $? -eq 0 ]]; then
 				local t=${__petriflow__arcs_attribs[${label}_target]}
 				local p=${__petriflow__arcs_attribs[${label}_source]}
-				local w=-1
+				local v=-1
 			else
 				local t=${__petriflow__arcs_attribs[${label}_source]}
 				local p=${__petriflow__arcs_attribs[${label}_target]}
-				local w=1
+				local v=1
 			fi
+			local w=$(($v * ${__petriflow__arcs_attribs[${label}_weight]}))
 			__petriflow__set_delta $__petriflow__model_dsl_prefix $p $t $w
 		fi
 	done
