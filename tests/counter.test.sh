@@ -10,7 +10,7 @@ function assert_OK() {
 }
 
 function assert_EQ() {
-	if [[ ! $1 =~ $2 ]]; then
+	if [[ ! $2 =~ $1 ]]; then
 		echo "expected ${1} =~ ${2}"
 		exit 1
 	fi

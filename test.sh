@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
-exec ./tests/model_defs.sh
+for t in  ./tests/*.test.sh ; do
+	echo $t
+	echo ------------------------------
+	$t
+	echo
+done
