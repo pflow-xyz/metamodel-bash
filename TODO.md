@@ -1,13 +1,11 @@
 WIP
 ---
 
-building out petri-net dsl in bash
+- [ ] add DSL support for inhibitors
 
 BACKLOG
 -------
-- [ ] allow multiple-x action invocation
-- [ ] test/check capacity
-- [ ] add DSL support for arc/inhibitors
+- [ ] test/check capacity on transition
 
 ICEBOX
 ------
@@ -15,5 +13,7 @@ ICEBOX
 
 DONE
 ----
+- [x] add DSL support for arc
 - [x] fix bug where place order is not deterministic
 - [x] should allow multi-model usage in same script (scoping)
+- [x] allow multiple-x action invocation

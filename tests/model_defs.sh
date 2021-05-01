@@ -22,11 +22,17 @@ function counter_v1() {
 	cell p0 0 10
 	cell p1 1 11
 
-	fn incP0 default 1,0
-	fn decP0 default -1,0
+	fn incP0 default
+	fn decP0 default
 
-	fn incP1 default 0,1
-	fn decP1 default 0,-1
+	fn incP1 default
+	fn decP1 default
+
+	tx incP0 p0 1
+	tx p0 decP0 1
+
+	tx incP1 p1 1
+	tx p1 decP1 1
 }
 
 m=$(Metamodel counter_v1)
@@ -41,20 +47,23 @@ assert_OK "failed to build initial vector"
 assert_EQ $state 0,1
 
 
-function tx() {
+function txn() {
 	local action=$1
-	local vout=$(${m}.transform $state $action)
+	local multiple="${2:-1}"
+	local vout=$(${m}.transform $state $action $multiple)
 	if [[ $? -eq 0 ]]; then
 		state=$vout
 	fi
 }
 
 echo state:${state}
-tx incP0
+txn incP0 3
 echo state:${state}
-tx incP0
+txn incP0 3
 echo state:${state}
-tx incP1
+txn decP0
 echo state:${state}
-tx incP0
+txn incP1
+echo state:${state}
+txn incP0
 echo state:${state}
