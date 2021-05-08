@@ -1,230 +1,421 @@
 #!/usr/bin/env bash
 
-#set -u # KLUDGE some issues with using strict mode
-
-# changed to a random id for each model 'instance'
-__petriflow__model_dsl_prefix="0000_"
-
-# metamodel data structures
-declare -A __petriflow__models
-declare -A __petriflow__roles
-declare -A __petriflow__places
-declare -A __petriflow__places_attribs
-declare -A __petriflow__transitions
-declare -A __petriflow__transitions_attribs
-declare -A __petriflow__arcs
-declare -A __petriflow__arcs_attribs
-
-# constructor
+# Metamodel Constructor
+# $1: model_declaration - a function name that is invoked to exec DSL code
+# $2: (optional) model_id - defaults to $RANDOM
 function Metamodel() {
-	echo "__Metamodel__ $RANDOM ${1} "
+	local model_declaration=$1
+	local model_id=${2:-$RANDOM}
+	echo "__mm__ $model_id $model_declaration "
 }
 
-function __Metamodel__() {
-	local id="$1" # object-id
-	local model=$2
-	local attrib="$3"
-	local state="${4:-}"
-	local action="${5:-}"
-	local multiple="${6:-1}"
+declare -A __mm__model
+declare -A __mm__role
+declare -A __mm__place
+declare -A __mm__place_attr
+declare -A __mm__arc
+declare -A __mm__arc_attr
+declare -A __mm__txn
+declare -A __mm__txn_attr
+declare -A __mm__guard
 
-	case "$attrib" in
+# dispatch calls to attributes and methods
+function __mm__() {
+	local model_id=${1}
+	local model_declaration=${2}
+	local operation=${3}
+	local state_or_arg=${4:-}
+	local action_or_role=${5:-}
+	local multiple=${6:-1}
+	local label
+	local prefix="${model_id}_"
+
+	case "$operation" in
 	'.init')
-		__petriflow__model_dsl_prefix="${id}_" # set instance prefix
-		__petriflow__models[$id]=$model        # record which model was loaded by object-id
-		$model                                 # evaluate the DSL
-		__petriflow__reindex                   # build the model
-		__petriflow__model_dsl_prefix="0000_"  # set back to default
-		;;
-	'.type')
-		echo ${__petriflow__models[$id]}
-		;;
+		__mm__prefix="${model_id}_"               # set instance prefix
+		__mm__model[$model_id]=$model_declaration # index model by object-id
+		$model_declaration                        # evaluate the DSL
+		__mm__reindex                             # build the model
+		;;                                        #
+	'.prefix')
+		echo "${model_id}_" # get attribute prefix
+		;;                  #
+	'.schema')
+		echo ${__mm__model[$model_id]} # return model name
+		;;                             #
 	'.empty_vector')
-		__petriflow__vector "${id}_" 0
-		;;
+		__mm__vector $prefix 0 # build empty vector of proper size
+		;;                           #
 	'.initial_vector')
-		__petriflow__vector "${id}_" initial
-		;;
+		__mm__vector $prefix initial # initial cell values
+		;;                                 #
 	'.capacity_vector')
-		__petriflow__vector "${id}_" capacity
+		__mm__vector $prefix capacity # cell max capacity
+		;;                                  #
+	'.transform')                        # apply a morphism
+		__mm__transform $prefix $state_or_arg $action_or_role $multiple
 		;;
-	'.transform')
-		__petriflow__transform ${id}_ $state $action $multiple
+	'.transitions')
+		for label in ${!__mm__txn[@]}; do
+			if [[ ! $label =~ $prefix ]]; then
+				continue
+			fi
+			echo ${__mm__txn_attr[${label}_fn]}
+		done
+		;;
+	'.places')
+		for label in ${!__mm__place[@]}; do
+			if [[ ! $label =~ $prefix ]]; then
+				continue
+			fi
+			echo ${__mm__place_attr[${label}_cell]}
+		done
+		;;
+	'.live_transitions') # apply a morphism
+		__mm__live_transitions $prefix $state_or_arg $action_or_role $multiple
+		;;
+	'.cell_offset') 
+		echo ${__mm__place_attr[${prefix}${state_or_arg}_offset]}
+		;;
+	'.cell_initial') 
+		echo ${__mm__place_attr[${prefix}${state_or_arg}_initial]}
+		;;
+	'.cell_capacity') 
+		echo ${__mm__place_attr[${prefix}${state_or_arg}_capacity]}
+		;;
+	'.fn_offset') 
+		echo ${__mm__txn_attr[${prefix}${state_or_arg}_offset]}
+		;;
+	'.fn_role') 
+		echo ${__mm__txn_attr[${prefix}${state_or_arg}_role]}
 		;;
 	*)
-		echo "UNDEFINED: ${attrib}"
-		exit -1
+		echo "UNDEFINED: ${operation}"
+		exit 101
 		;;
 	esac
 }
 
-function __petriflow__is_place() {
-	if [[ "${__petriflow__places[$1]}x" == "x" ]]; then
+# assert label is not already in use
+function __mm__assert_not_exists() {
+	local prefix=${1}
+	local label=${2}
+
+	__mm__is_place ${prefix}${label}
+	if [[ $? -eq 0 ]]; then
+		echo ${label} place already defined
+		exit 102
+	fi
+	__mm__is_transition ${prefix}${label}
+	if [[ $? -eq 0 ]]; then
+		echo ${label} transition already defined
+		exit 103
+	fi
+}
+
+# assert source and target are different elements
+function __mm__assert_good_arc() {
+	local prefix=${1}
+	local source=${2}
+	local target=${3}
+
+	__mm__is_place ${prefix}${source}
+	if [[ $? -eq 0 ]]; then
+		__mm__is_transition ${prefix}${target}
+		if [[ $? -ne 0 ]]; then
+			echo "${source} -> ${target} : expect place -> transition"
+			exit 104
+		fi
+		return 0
+	fi
+	__mm__is_transition ${prefix}${source}
+	if [[ $? -eq 0 ]]; then
+		__mm__is_place ${prefix}${target}
+		if [[ $? -ne 0 ]]; then
+			echo "${source} -> ${target} : expect transition -> place"
+			exit 105
+		fi
+		return 0
+	fi
+	echo "bad arc"
+	exit 106
+}
+
+# look for matching place by label
+function __mm__is_place() {
+	if [[ -z ${__mm__place[$1]} ]]; then
 		return -1
 	else
 		return 0
 	fi
 }
 
-function __petriflow__is_transition() {
-	if [[ "${__petriflow__transitions[$1]}x" == "x" ]]; then
+# look for matching transition by label
+function __mm__is_transition() {
+	if [[ -z ${__mm__txn[$1]} ]]; then
 		return -1
 	else
 		return 0
 	fi
 }
 
-function __petriflow__set_delta() {
-	local prefix=$1
-	local place=$2
-	local transition=$3
-	local weight=$4
+# set vector transformation
+function __mm__set_delta() {
+	local prefix=${1}
+	local place=${2}
+	local transition=${3}
+	local weight=${4}
 
-	local k="${prefix}${transition}_delta"
-	local d=${__petriflow__transitions_attribs[$k]}
-	local o=${__petriflow__places_attribs[${prefix}${place}_offset]}
+	local label="${prefix}${transition}_delta"
+	local delta=${__mm__txn_attr[$label]}
+	local offset=${__mm__place_attr[${prefix}${place}_offset]}
+	local vector
 
-	IFS=, read -a arr1 <<<$d
+	IFS=, read -a vector <<<$delta
 
-	arr1[$o]=$weight
+	vector[$offset]=$weight
 
-	__petriflow__transitions_attribs[$k]=$(__petriflow__join_by ',' ${arr1[@]})
+	__mm__txn_attr[$label]=$(__mm__join_by ',' ${vector[@]})
 }
 
-function __petriflow__reindex() {
+# declare a guard/arc that inhibits a transition
+function __mm__set_guard() {
+	local arc_id=${1}
+	local place=${2}
+	local transition=${3}
+	local weight=${4}
+	local vector
 
-	local empty_vector=$(__petriflow__vector $__petriflow__model_dsl_prefix 0)
+	__mm__is_place ${prefix}${transition}
+	if [[ $? -eq 0 ]]; then
+		echo "bad guard - target must be transition"
+		exit 107
+	fi
+	__mm__is_transition ${prefix}${place}
+	if [[ $? -eq 0 ]]; then
+		echo "bad guard - source must be place"
+		exit 107
+	fi
 
-	for label in "${!__petriflow__transitions[@]}"; do
-		__petriflow__transitions_attribs[${label}_delta]=$empty_vector
+	local label="${__mm__prefix}${transition}_${arc_id}_guard"
+	local offset=${__mm__place_attr[${prefix}${place}_offset]}
+
+	IFS=, read -a vector <<<$(__mm__vector $__mm__prefix 0)
+	vector[$offset]=$weight
+	__mm__guard[$label]=$(__mm__join_by ',' ${vector[@]})
+}
+
+# build model from declaration
+function __mm__reindex() {
+	local empty_vector=$(__mm__vector $__mm__prefix 0)
+	local prefix=$__mm__prefix
+	local label
+
+	for label in ${!__mm__txn[@]}; do
+		if [[ ! $label =~ $prefix ]]; then
+			continue
+		fi
+		__mm__txn_attr[${label}_delta]=$empty_vector
 	done
 
-	for label in "${!__petriflow__arcs[@]}"; do
-		if [[ $label =~ $__petriflow__model_dsl_prefix ]]; then
-			__petriflow__is_place ${__petriflow__model_dsl_prefix}${__petriflow__arcs_attribs[${label}_source]}
-			if [[ $? -eq 0 ]]; then
-				local t=${__petriflow__arcs_attribs[${label}_target]}
-				local p=${__petriflow__arcs_attribs[${label}_source]}
-				local v=-1
-			else
-				local t=${__petriflow__arcs_attribs[${label}_source]}
-				local p=${__petriflow__arcs_attribs[${label}_target]}
-				local v=1
-			fi
-			local w=$(($v * ${__petriflow__arcs_attribs[${label}_weight]}))
-			__petriflow__set_delta $__petriflow__model_dsl_prefix $p $t $w
+	for label in ${!__mm__arc[@]}; do
+		if [[ ! $label =~ $prefix ]]; then
+			continue
 		fi
+
+		# inhibitor arc
+		if [[ "${__mm__arc_attr[${label}_guard]}" -eq 1 ]]; then
+			local place=${__mm__arc_attr[${label}_source]}
+			local transition=${__mm__arc_attr[${label}_target]}
+			local id=${__mm__arc_attr[${label}_id]}
+			local weight=$((-1 * ${__mm__arc_attr[${label}_weight]}))
+			__mm__set_guard $id $place $transition $weight
+			continue
+		fi
+
+		# arc
+		__mm__is_place ${prefix}${__mm__arc_attr[${label}_source]}
+		if [[ $? -eq 0 ]]; then
+			local transition=${__mm__arc_attr[${label}_target]}
+			local place=${__mm__arc_attr[${label}_source]}
+			local v=-1 # tokens leave the cell
+		else
+			local transition=${__mm__arc_attr[${label}_source]}
+			local place=${__mm__arc_attr[${label}_target]}
+			local v=1 # tokens added to cell
+		fi
+		local weight=$(($v * ${__mm__arc_attr[${label}_weight]}))
+		__mm__set_delta $prefix $place $transition $weight
 	done
 }
 
 # join arrays on a single char
-function __petriflow__join_by {
-	local IFS="$1"
+function __mm__join_by {
+	local IFS=${1}
 	shift
 	echo "$*"
 }
 
-# accepts name of attribute to collect into a csv/vector
-function __petriflow__vector() {
+# accepts name of attribute to return as a vector
+function __mm__vector() {
 	local prefix=$1
-	local attrib=$2
-	declare -a local vout
+	local operation=$2
+	declare -a local vector_out
+	local label
 
-	for label in "${!__petriflow__places[@]}"; do
-		if [[ $label =~ $prefix ]]; then
-			local i=${__petriflow__places_attribs[${label}_offset]}
-			if [[ "${attrib}x" == "0x" ]]; then
-				vout[$i]=0
-			else
-				vout[$i]=${__petriflow__places_attribs[${label}_${attrib}]}
+	for label in ${!__mm__place[@]}; do
+		if [[ ! $label =~ $prefix ]]; then
+			continue
+		fi
+
+		local i=${__mm__place_attr[${label}_offset]}
+		if [[ ${operation} == 0 ]]; then
+			vector_out[$i]=0
+		else
+			vector_out[$i]=${__mm__place_attr[${label}_${operation}]}
+		fi
+	done
+
+	echo $(__mm__join_by ',' ${vector_out[@]})
+}
+
+# performs vector1 * (vector2 * multiple)
+# returns -1 if any part of the result is negative or exceeds capacity
+function __mm__vector_add() {
+	local vector1
+	local vector2
+	local multiple
+	local capacity
+
+	IFS=, read -a vector1 <<<${1}
+	IFS=, read -a vector2 <<<${2}
+	multiple=${3:-1}
+	IFS=, read -a capacity <<<${4}
+
+	local vector_out
+	local scalar
+	for label in ${!vector1[@]}; do
+		local delta=$((${vector2[$label]} * ${multiple}))
+		scalar=$((${vector1[$label]} + $delta))
+
+		if [[ ${capacity[$label]} > 0 ]] && [[ ${capacity[$label]} < $scalar ]]; then
+			# store negative overflow output
+			scalar=$((${capacity[$label]} - ${scalar}))
+		fi
+		vector_out=${vector_out}${scalar},
+	done
+
+	echo -n "${vector_out%?}" # strip last comma
+
+	# check for negative numbers
+	if [[ $vector_out =~ '-' ]]; then
+		return -1
+	else
+		return 0
+	fi
+}
+
+# evaluate inhibitor arcs
+function __mm__test_guards() {
+	local state=${1}
+	local prefix=${2}
+	local action=${3}
+	local vector_out
+	local empty=$(__mm__vector $prefix 0)
+	for label in ${!__mm__guard[@]}; do
+		if [[ ! $label =~ "${prefix}${action}_" ]]; then
+			continue
+		fi
+		vector_out=$(__mm__vector_add $state ${__mm__guard[$label]} 1 $empty)
+		if [[ $? -eq 0 ]]; then
+			echo $vector_out
+			return 1
+		fi
+	done
+	return 0
+}
+
+# state transformation
+function __mm__transform() {
+	local prefix=${1}
+	local state=${2}
+	local action=${3}
+	local multiple="${4:-1}"
+	local guard_out
+	local capacity=$(__mm__vector $prefix capacity)
+
+	guard_out=$(__mm__test_guards $state $prefix $action)
+	if [[ $? -eq 0 ]]; then
+		local delta=${__mm__txn_attr[${prefix}${action}_delta]}
+		__mm__vector_add $state $delta $multiple $capacity
+	else
+		echo guard_fail: $guard_out
+		return 1
+	fi
+}
+
+# state transformation
+function __mm__live_transitions() {
+	local prefix=${1}
+	local state=${2}
+	local role=${3}
+	local multiple="${4:-1}"
+	local out
+
+	for label in ${!__mm__txn[@]}; do
+		if [[ ! $label =~ $prefix ]]; then
+			continue
+		fi
+		if [[ $role == ${__mm__txn_attr[${label}_role]} ]] ; then
+			local action=${__mm__txn_attr[${label}_fn]}
+			out=$(__mm__transform $prefix $state $action $multiple)
+			if [[ $? -eq 0 ]] ; then
+				echo $action
 			fi
 		fi
 	done
 
-	echo $(__petriflow__join_by ',' ${vout[@]})
-
 }
 
-# add two vectors
-# returns -1 if any part of the result is negative
-function __petriflow__vadd() {
-	local arr1
-	local arr2
-
-	IFS=, read -a arr1 <<<$1
-	IFS=, read -a arr2 <<<$2
-
-	local multiple=${3:-1}
-
-	local out=""
-	for k in ${!arr1[@]}; do
-		local delta=$((${arr2[$k]} * ${multiple}))
-		out=$out$((${arr1[$k]} + $delta)),
-	done
-
-	echo -n "${out%?}" # strip last comma
-
-	# check for negative numbers
-	if [[ ! $out =~ '-' ]]; then
-		return 0
-	else
-		return -1
-	fi
-}
-
-function __petriflow__transform() {
-	local prefix=$1
-	local state=$2
-	local action=$3
-	local multiple="${4:-1}"
-	echo $(__petriflow__vadd $state ${__petriflow__transitions_attribs[${prefix}${action}_delta]} ${multiple})
-}
-
-function __petriflow__assert_modeling() {
-	if [[ __petriflow__model_dsl_prefix == "0000_" ]]; then
-		echo "models must be loaded by Metamodel constructor"
-		exit -2
-	fi
-}
-
-################ DSL ################
+###################### Model DSL ######################
 
 # define an actor
 function role() {
-	__petriflow__assert_modeling
-	__petriflow__roles[${__petriflow__model_dsl_prefix}${1}_role]=$1
+	__mm__role[${__mm__prefix}${1}_role]=$1
 }
 
 # declare a place to store tokens
 function cell() {
-	__petriflow__assert_modeling
-	__petriflow__places_attribs[${__petriflow__model_dsl_prefix}${1}_offset]=${#__petriflow__places[@]} # FIXME strict mode fails here
-	__petriflow__places_attribs[${__petriflow__model_dsl_prefix}${1}_cell]=$1
-	__petriflow__places_attribs[${__petriflow__model_dsl_prefix}${1}_initial]=$2
-	__petriflow__places_attribs[${__petriflow__model_dsl_prefix}${1}_capacity]=$3
-	__petriflow__places[${__petriflow__model_dsl_prefix}${1}]=${1}
+	__mm__assert_not_exists ${__mm__prefix} ${1}
+	__mm__place_attr[${__mm__prefix}${1}_offset]=${#__mm__place[@]}
+	__mm__place_attr[${__mm__prefix}${1}_cell]=$1
+	__mm__place_attr[${__mm__prefix}${1}_initial]=$2
+	__mm__place_attr[${__mm__prefix}${1}_capacity]=$3
+	__mm__place[${__mm__prefix}${1}]=$1
 }
 
 # declare a transition to move tokens between cells
 function fn() {
-	__petriflow__assert_modeling
-	__petriflow__transitions_attribs[$__petriflow__model_dsl_prefix${1}_offset]=${#__petriflow__transitions[@]}
-	__petriflow__transitions_attribs[$__petriflow__model_dsl_prefix${1}_fn]=$1
-	__petriflow__transitions_attribs[$__petriflow__model_dsl_prefix${1}_role]=$2
-	__petriflow__transitions[${__petriflow__model_dsl_prefix}${1}]=${1}
+	__mm__assert_not_exists ${__mm__prefix} ${1}
+	__mm__txn_attr[$__mm__prefix${1}_offset]=${#__mm__txn[@]}
+	__mm__txn_attr[$__mm__prefix${1}_fn]=$1
+	__mm__txn_attr[$__mm__prefix${1}_role]=$2
+	__mm__txn[${__mm__prefix}${1}]=$1
 }
 
+# declare arcs/paths between places and transitions
 function tx() {
-	arc_id=${#__petriflow__arcs[@]}
-	__petriflow__arcs_attribs[$__petriflow__model_dsl_prefix${arc_id}_id]=${arc_id}
-	__petriflow__arcs_attribs[$__petriflow__model_dsl_prefix${arc_id}_source]=$1
-	__petriflow__arcs_attribs[$__petriflow__model_dsl_prefix${arc_id}_target]=$2
-	__petriflow__arcs_attribs[$__petriflow__model_dsl_prefix${arc_id}_weight]=${3:-1}
-	__petriflow__arcs[$__petriflow__model_dsl_prefix${arc_id}]=${arc_id}
+	__mm__assert_good_arc $__mm__prefix $1 $2
+	local arc_id=${#__mm__arc[@]}
+	__mm__arc_attr[$__mm__prefix${arc_id}_id]=$arc_id
+	__mm__arc_attr[$__mm__prefix${arc_id}_source]=$1
+	__mm__arc_attr[$__mm__prefix${arc_id}_target]=$2
+	__mm__arc_attr[$__mm__prefix${arc_id}_weight]=${3:-1} # default=1
+	__mm__arc_attr[$__mm__prefix${arc_id}_guard]=${4:-0}  # 0=arc, 1=guard
+	__mm__arc[$__mm__prefix${arc_id}]=$arc_id
 }
 
+# declare an inhibitor arc - provides conditional tx live-ness
 function guard() {
-	# FIXME: add inhibitor arcs
-	#__petriflow__arcs_attribs[$__petriflow__model_dsl_prefix${arc_id}_inhibit]=${1}
-	return
+	tx ${1} ${2} ${3:-1} 1
 }
