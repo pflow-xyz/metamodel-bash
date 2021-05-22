@@ -24,10 +24,12 @@ function move() {
 }
 
 function valid_moves() {
-	${m}.live_transitions $state PlayerX 1
-	${m}.live_transitions $state PlayerO 1
+	if [[ $((${#board[@]} % 2)) -eq 0 ]]; then
+		${m}.live_transitions $state PlayerX 1
+	else
+		${m}.live_transitions $state PlayerO 1
+	fi
 }
-
 
 function test_invariants() {
 	assert_EQ $(${m}.schema) octoe_v1
@@ -41,6 +43,8 @@ function test_invariants() {
 	assert_EQ $(${m}.fn_role X11) PlayerX
 }
 
+# The board datastructure is a dual representation of the state vector.
+# we can use it as a convenient way to test for win conditions
 function is_winner() {
 	if [[ "${board[p00]},${board[p11]},${board[p22]}" == "${1},${1},${1}" || \
 		"${board[p02]},${board[p11]},${board[p20]}" == "${1},${1},${1}" || \
@@ -57,19 +61,33 @@ function game_is_over() {
 	if [[ ${#board[@]} < 5 ]]; then
 		return 1
 	fi
-	is_winner X
-	if [[ $? -eq 0 ]]; then
-		stats[X]=$((${stats[X]} + 1))
-		echo X Wins
-		return 0
-	fi
-	is_winner O
-	if [[ $? -eq 0 ]]; then
-		stats[O]=$((${stats[O]} + 1))
-		echo O Wins
-		return 0
+	if [[ $((${#board[@]} % 2)) -eq 0 ]]; then
+		is_winner O
+		if [[ $? -eq 0 ]]; then
+			stats[O]=$((${stats[O]} + 1))
+			echo O Wins
+			return 0
+		fi
+	else
+		is_winner X
+		if [[ $? -eq 0 ]]; then
+			stats[X]=$((${stats[X]} + 1))
+			echo X Wins
+			return 0
+		fi
 	fi
 	return 1
+}
+
+# The "little language" formed from the petri-net labels
+# serves as a coding for game-state
+#
+# Formal verification of this program is possible
+# by observing the correspondence between model and code.
+function play() {
+	local action=$1
+	move $action 1 assert_OK
+	board["p${action:1:2}"]=${action:0:1} # X11 becomes p11=X
 }
 
 function play_random_game() {
@@ -82,8 +100,7 @@ function play_random_game() {
 	while [[ ${#live[@]} -gt 0 ]]; do
 		local i=$(($RANDOM % ${#live[@]}))
 		local action=${live[$i]} # choose random action
-		move $action 1 assert_OK
-		board["p${action:1:2}"]=${action:0:1}
+		play $action
 		echo "     ${action} => ${state}"
 		live=($(valid_moves))
 		game_is_over && return
