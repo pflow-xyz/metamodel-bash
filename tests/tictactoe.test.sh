@@ -46,11 +46,16 @@ function test_invariants() {
 # The board datastructure is a dual representation of the state vector.
 # we can use it as a convenient way to test for win conditions
 function is_winner() {
-	if [[ "${board[p00]},${board[p11]},${board[p22]}" == "${1},${1},${1}" || \
-		"${board[p02]},${board[p11]},${board[p20]}" == "${1},${1},${1}" || \
-		"${board[p00]},${board[p01]},${board[p02]}" == "${1},${1},${1}" || \
-		"${board[p10]},${board[p11]},${board[p12]}" == "${1},${1},${1}" || \
-		"${board[p20]},${board[p21]},${board[p22]}" == "${1},${1},${1}" ]]; then
+	winset="${1},${1},${1}"
+
+	if [[ "${board[p00]},${board[p11]},${board[p22]}" == "${winset}" || \
+		"${board[p02]},${board[p11]},${board[p20]}" == "${winset}" || \
+		"${board[p00]},${board[p01]},${board[p02]}" == "${winset}" || \
+		"${board[p10]},${board[p11]},${board[p12]}" == "${winset}" || \
+		"${board[p20]},${board[p21]},${board[p22]}" == "${winset}" || \
+		"${board[p00]},${board[p10]},${board[p20]}" == "${winset}" || \
+		"${board[p01]},${board[p11]},${board[p21]}" == "${winset}" || \
+		"${board[p02]},${board[p12]},${board[p22]}" == "${winset}" ]]; then
 		return 0
 	else
 		return 1
