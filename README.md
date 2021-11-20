@@ -1,7 +1,7 @@
-petriflowsh
------------
+metamodel-bash
+--------------
 
-Petri-nets in pure bash.
+Petri-net models in pure bash.
 
 
 ## Usage
@@ -27,16 +27,16 @@ function counter_v0() {
 	tx p0 decP0 1
 }
 
-# 1. load it
+# 1. load definition
 m=$(Metamodel counter_v0)
 ${m}.init
 
-# 2. use it to compute transformations
+# 2. compute transformations
 local state
 local action=incP0
 local multiple=1
 
-# 3. profit
+# 3. manage state
 state=$(${m}.initial_vector)
 state=$(${m}.transform $state $action $multiple)
 ```
