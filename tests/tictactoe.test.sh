@@ -41,6 +41,7 @@ function test_invariants() {
 	assert_EQ $(${m}.cell_capacity p11) 1
 	assert_EQ $(${m}.fn_offset X11) 7
 	assert_EQ $(${m}.fn_role X11) PlayerX
+	${m}.to_json
 }
 
 # The board datastructure is a dual representation of the state vector.

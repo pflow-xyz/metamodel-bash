@@ -55,6 +55,8 @@ assert_OK 'expected clearFlag to be a transition'
 __mm__is_place "${prefix}clearFlag"
 assert_FAIL 'clearFlag should not be a place'
 
+echo $(${m}.to_json)
+
 
 # Test morphisms
 function txn() {

@@ -109,6 +109,9 @@ function __mm__() {
 	'.fn_role') 
 		echo ${__mm__txn_attr[${prefix}${state_or_arg}_role]}
 		;;
+	'.to_json')
+		__mm__to_json $prefix $model_id
+		;;
 	*)
 		echo "UNDEFINED: ${operation}"
 		exit 101
@@ -396,6 +399,58 @@ function __mm__live_transitions() {
 	done
 
 }
+
+function __mm__to_json() {
+	local prefix=${1}
+	local places_out=""
+	local transitions_out=""
+
+	for label in ${!__mm__place[@]}; do
+		if [[ ! $label =~ $prefix ]]; then
+			continue
+		fi
+		local offset=${__mm__place_attr[${label}_offset]}
+		local cell=${__mm__place_attr[${label}_cell]}
+		local initial=${__mm__place_attr[${label}_initial]}
+		local capacity=${__mm__place_attr[${label}_capacity]}
+		places_out="${places_out}\"${cell}\": {\"label\": \"${cell}\", \"offset\": ${offset},  \"initial\": \"${initial}\", \"capacity\": \"${capacity}\" },"
+	done
+
+	for label in ${!__mm__txn[@]}; do
+		if [[ ! $label =~ $prefix ]]; then
+			continue
+		fi
+		local offset=${__mm__txn_attr[${label}_offset]}
+		local fn=${__mm__txn_attr[${label}_fn]}
+		local role=${__mm__txn_attr[${label}_role]}
+		local action=${__mm__txn_attr[${label}_fn]}
+		local delta=${__mm__txn_attr[${label}_delta]}
+		local guards=$(__mm__guards_json $prefix $action)
+		transitions_out="${transitions_out}\"${fn}\": { \"offset\": ${offset}, \"label\": \"${fn}\", \"role\": \"${role}\", \"delta\": [${delta}], \"guards\": [${guards}] },"
+	done
+	local schema=${__mm__model[$model_id]}
+	echo "{ \"schema\": \"${schema}\", \"places\": {${places_out::-1}}, \"transition\": {${transitions_out::-1}} }"
+
+}
+
+# write guard json as vectors
+function __mm__guards_json() {
+	local prefix=${1}
+	local action=${2}
+	local guards_json=""
+	for label in ${!__mm__guard[@]}; do
+		if [[ ! $label =~ "${prefix}${action}_" ]]; then
+			continue
+		fi
+		guards_json="${guards_json}[${__mm__guard[$label]}],"
+	done
+
+	if [[ -n $guards_json ]] ; then
+		echo "${guards_json::-1}"
+	fi
+	return 0
+}
+
 
 ###################### Model DSL ######################
 
