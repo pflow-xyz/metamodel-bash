@@ -15,7 +15,5 @@ function test_json_output() {
 	echo $(${m}.to_json)
 }
 
-declare -A stats
-declare -A board
 before_all
 test_json_output

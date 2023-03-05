@@ -22,7 +22,6 @@
 # $1: model_declaration - a function name that is invoked to exec DSL code
 # $2: (optional) model_id - defaults to $RANDOM
 
-
 function Metamodel() {
 	local model_declaration=$1
 	local model_id=${2:-$RANDOM}
@@ -58,22 +57,22 @@ function __mm__() {
 		__mm__reindex                             # build the model
 		;;                                        #
 	'.prefix')
-		echo "${model_id}_" # get attribute prefix
-		;;                  #
+		echo $prefix # get attribute prefix used to distinguish multiple models
+		;;
 	'.schema')
 		echo ${__mm__model[$model_id]} # return model name
-		;;                             #
+		;;
 	'.empty_vector')
 		__mm__vector $prefix 0 # build empty vector of proper size
-		;;                           #
+		;;
 	'.initial_vector')
 		__mm__vector $prefix initial # initial cell values
-		;;                                 #
+		;;
 	'.capacity_vector')
 		__mm__vector $prefix capacity # cell max capacity
-		;;                                  #
-	'.transform')                        # apply a morphism
-		__mm__transform $prefix $state_or_arg $action_or_role $multiple
+		;;
+	'.transform')
+		__mm__transform $prefix $state_or_arg $action_or_role $multiple # apply a morphism
 		;;
 	'.transitions')
 		for label in ${!__mm__txn[@]}; do
@@ -94,19 +93,19 @@ function __mm__() {
 	'.live_transitions') # apply a morphism
 		__mm__live_transitions $prefix $state_or_arg $action_or_role $multiple
 		;;
-	'.cell_offset') 
+	'.cell_offset')
 		echo ${__mm__place_attr[${prefix}${state_or_arg}_offset]}
 		;;
-	'.cell_initial') 
+	'.cell_initial')
 		echo ${__mm__place_attr[${prefix}${state_or_arg}_initial]}
 		;;
-	'.cell_capacity') 
+	'.cell_capacity')
 		echo ${__mm__place_attr[${prefix}${state_or_arg}_capacity]}
 		;;
-	'.fn_offset') 
+	'.fn_offset')
 		echo ${__mm__txn_attr[${prefix}${state_or_arg}_offset]}
 		;;
-	'.fn_role') 
+	'.fn_role')
 		echo ${__mm__txn_attr[${prefix}${state_or_arg}_role]}
 		;;
 	'.to_json')
@@ -389,10 +388,10 @@ function __mm__live_transitions() {
 		if [[ ! $label =~ $prefix ]]; then
 			continue
 		fi
-		if [[ $role == ${__mm__txn_attr[${label}_role]} ]] ; then
+		if [[ $role == ${__mm__txn_attr[${label}_role]} ]]; then
 			local action=${__mm__txn_attr[${label}_fn]}
 			out=$(__mm__transform $prefix $state $action $multiple)
-			if [[ $? -eq 0 ]] ; then
+			if [[ $? -eq 0 ]]; then
 				echo $action
 			fi
 		fi
@@ -445,12 +444,11 @@ function __mm__guards_json() {
 		guards_json="${guards_json}[${__mm__guard[$label]}],"
 	done
 
-	if [[ -n $guards_json ]] ; then
+	if [[ -n $guards_json ]]; then
 		echo "${guards_json::-1}"
 	fi
 	return 0
 }
-
 
 ###################### Model DSL ######################
 
